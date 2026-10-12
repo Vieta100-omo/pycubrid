@@ -7,6 +7,74 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+
+- **Wider typed prepared parameters (#840)** — `pycubrid.compat.native`
+  `cursor.bind_param()` now sends `bool` (INT 1/0, the literal path's value),
+  64-bit `int` (BIGINT), `int` past 64 bits up to 38 digits and `Decimal`
+  (NUMERIC text), `float` (DOUBLE), `date`, `time` and naive `datetime` (DATE,
+  TIME, DATETIME), aware `datetime` (DATETIMETZ with the literal path's zone
+  text) and `bytes`/`bytearray` (VARBIT) as typed host variables. The checks
+  match the literal path: `nan`/`inf` raise `ProgrammingError`, more than 38
+  digits raise `DataError`, and forged subclasses are refused. An empty `bytes`
+  value raises `NotSupportedError`, because the broker reads a zero-length bind
+  as NULL. Existing INT32, string and NULL binds keep their exact bytes, and the
+  ordinary cursors' literal binding is unchanged. Host-variable coercion differs
+  from literal coercion in a few documented cases (a `float` is DOUBLE, not a
+  NUMERIC literal; conversion failures are server error -494); see
+  [Prepared host-variable mapping](docs/PARAMETER_BINDING.md#prepared-host-variable-mapping).
+  Round trips against the literal path pass on CUBRID 10.2, 11.0, 11.2 and
+  11.4. The encoder is shared so the planned opt-in `EXECUTE_ARRAY` batch path
+  (#839) can reuse it.
+- **`typing.Self` for context-manager and iterator returns (#689)** —
+  `Connection.__enter__`, `Cursor.__enter__` / `__iter__`, `Lob.__enter__`,
+  `AsyncConnection.__aenter__` and `AsyncCursor.__aenter__` / `__aiter__` are now
+  annotated `-> Self` instead of the concrete class, so subclasses keep their own
+  type in `with` / `async with` blocks and `for` / `async for` loops. A static
+  contract module, `tests/typing_self_contract.py`, is part of `make typecheck` and
+  fails mypy if any of these annotations regresses. Annotations only; no runtime
+  change.
+
+### Changed
+
+- **CUBRIDdb wrapper integers past 32 bits (#840)** — the
+  `pycubrid.compat.cubriddb` cursors pass `int` arguments to native
+  `bind_param()`, so a value past signed 32-bit now binds BIGINT (or NUMERIC
+  past 64 bits) instead of raising `DataError`. The wrapper still rejects
+  `bool`, `float`, `bytes` and temporal scalars.
+
+### CI
+
+- **Repository-local issue closure in PRs** — the required `PR title` check now
+  rejects direct closing keywords targeting a different GitHub repository in the
+  PR body, the PR title and the PR's commit messages (the title and commit
+  messages make up the squash commit); local `Closes #N` and cross-repository
+  `Refs owner/repo#N` remain valid. The body is untrusted data and nothing is
+  checked out; the job's token can only read pull requests, to list the commit
+  messages, and a PR with 250 or more commits fails because GitHub lists only
+  250. The body is read the way GitHub's cmark-gfm renders it: block quotes,
+  list items, footnote definitions, lazy continuation, setext headings, HTML
+  blocks, tables and link reference definitions. Only fenced and indented code,
+  HTML comments and code spans are ignored; where a construct can be read more
+  than one way every reading is checked, and text that any reading shows counts
+  as live. Keywords and references split by emphasis (`*`, `_`, `~`), inline
+  HTML, comments, entities or escapes are caught, as are `http://`, `www.`,
+  autolink, `<a href>`, inline and reference-link issue URLs. The title and
+  commit messages are plain text and are checked as written. Regression tests
+  cover each case.
+
+## [1.11.0] - 2026-10-11
+
+### Added
+
+- **Python 3.15 support (cubrid-lab/sqlalchemy-cubrid#666)** — the package
+  declares the Python 3.15 classifier, and the full compatibility matrix now runs
+  Python 3.11–3.15 × CUBRID 10.2/11.0/11.2/11.4 (20 cells) on manual dispatch and
+  every release. Standard GIL builds only; free-threaded builds are not
+  supported. `requires-python` stays `>=3.11`. Decimal-subclass parameters need
+  the C `_decimal` module; a Python built without `libmpdec` lacks it, and the
+  `actions/setup-python` 3.15.0 build, the `python:3.15-rc` Docker image and a
+  source build without `libmpdec-dev` were observed without it. See the support
+  matrix.
 - **CUBRIDdb wrapper collection arguments and `executemany()` (#610)** — the
   opt-in `pycubrid.compat.cubriddb` cursors now accept the official wrapper's
   collection call shapes. `execute(query, args, set_type)` binds `list`,
@@ -33,7 +101,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   unchanged. See
   [Wrapper collection arguments](docs/API_REFERENCE.md#wrapper-collection-arguments).
 
+* **compat:** accept collection parameters in wrapper execute and executemany ([#813](https://github.com/cubrid-lab/pycubrid/issues/813)) ([1accfaa](https://github.com/cubrid-lab/pycubrid/commit/1accfaa22945d3bd868f5940a68f085dae32a3ec))
+* **python:** declare Python 3.15 support ([#831](https://github.com/cubrid-lab/pycubrid/issues/831)) ([0563613](https://github.com/cubrid-lab/pycubrid/commit/056361386e3cb41af0558bd7cd974eb07d75a0a1))
+
 ### Fixed
+
+- **`charset="ksc5601"` works on Python 3.15** — Python 3.15 maps its own
+  `ksc5601` codec alias to CP949, which pycubrid rejects because CP949 can emit
+  ASCII bytes inside a multibyte character, so connecting with
+  `charset="ksc5601"` raised `ValueError` on 3.15. pycubrid now maps `ksc5601`
+  to EUC-KR itself, as it resolved on Python 3.11–3.14. Other Python KS C 5601
+  aliases such as `ks_c_5601` and `korean` follow the running Python's codec
+  table, so on 3.15 they resolve to CP949 and are rejected.
 - **The second occurrence of a repeated DST hour binds as itself (#819)** — an
   aware `datetime` with a region `tzinfo` (`ZoneInfo`) in a repeated wall time
   was sent with the region alone, which CUBRID resolves to the first
@@ -68,7 +147,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   mutation job already uses 3.12. Contributor tooling only; the driver is
   unchanged.
 
+* **collect_repro:** redact passwords of CUBRID_TEST_URL values without "://" ([#778](https://github.com/cubrid-lab/pycubrid/issues/778)) ([dc0683f](https://github.com/cubrid-lab/pycubrid/commit/dc0683fd27ad1a7f0500b640baa0c74276c1030c))
+* **collect_repro:** treat non-IPv6 bracketed hosts as unparseable ([#776](https://github.com/cubrid-lab/pycubrid/issues/776)) ([164d0d5](https://github.com/cubrid-lab/pycubrid/commit/164d0d58819aea81281606708e3acfa07492c916))
+* **types:** bind the second occurrence of a repeated DST hour as itself ([#820](https://github.com/cubrid-lab/pycubrid/issues/820)) ([2228d66](https://github.com/cubrid-lab/pycubrid/commit/2228d663b6e2c9462c648b9dd941720219c464ae))
+
 ### Security
+
 - **`scripts/collect_repro.py` redacts more forms of the password of a
   `CUBRID_TEST_URL` that `urllib` splits in the wrong place (#777)** — a URL
   without `://` (`u:pw@host/db`, `cubrid:u:pw@host/db`, `cubrid:/u:pw@host/db`),
@@ -119,6 +203,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   tooling fix; the driver is unchanged.
 
 ### Documentation
+
+- **Performance guide records the prepared batch evaluation (#836)** — `docs/PERFORMANCE.md`
+  and its Korean copy gain a section on the prepared alternatives to the literal
+  `executemany()` batch, measured on CUBRID 10.2, 11.0, 11.2 and 11.4
+  (cubrid-lab/cubrid-benchmark#23). A prototype `EXECUTE_ARRAY` request took 0.33-0.55x
+  of `executemany()` for INSERT, UPDATE and DELETE and 0.15-0.61x for MERGE at 10,000 rows.
+  Its transaction, partial-failure and `rowcount` behaviour matched the current batch on
+  all four versions, but it accepts only the narrow prepared type set. The prepare-once
+  loop was slower than the batch on 10.2 and 11.0. `executemany()` keeps the literal batch
+  by default; the opt-in path, the wider prepared types and per-row failure reporting are
+  tracked in #839, #840 and #841. Docs only; driver behaviour is unchanged.
+- **Performance guide explains the `executemany()` gap against CUBRIDdb (#822)** —
+  `docs/PERFORMANCE.md` and its Korean copy gain a section with the measured ratios
+  (INSERT 1.13x, 1.39x and 1.54x at 100, 1,000 and 10,000 rows; MERGE up to 4.72x), the
+  finding that about 95% of the statement phase is waiting for the broker (about 275 µs per
+  literal batch statement against about 131 µs per prepared execute), and what users can do.
+  The "not measured" list no longer names UPDATE, DELETE, MERGE and the client/server split.
+  The prepared-statement batch path and the cached placeholder tokenisation are tracked in
+  #836 and #837. Docs only; driver behaviour is unchanged.
+- **Contributor and development guides state the Python 3.11+ requirement (#700)** —
+  the prerequisites in `CONTRIBUTING.md` and `docs/DEVELOPMENT.md`, with their Korean
+  copies, still said Python 3.10+. They now say 3.11+, and the development guide's note
+  points to `requires-python` instead of naming Python 3.10 syntax. The recorded past CI
+  matrix in the development guide is unchanged. Docs only.
+- **Connection guide and PRD state the Python 3.11+ requirement (#701)** — the
+  prerequisite row in `docs/CONNECTION.md` and the runtime row of the PRD dependency
+  matrix, with their Korean copies, still said Python 3.10+ after 1.10.0 raised
+  `requires-python` to `>=3.11`. They now say 3.11+. Recorded past measurements and
+  behavior that name Python 3.10 are unchanged. Docs only.
 - **Private vulnerability reporting is the preferred security channel (#751)** — GitHub
   private vulnerability reporting is now enabled for the repository. `SECURITY.md` names it
   as the preferred private route and keeps the maintainer email as the fallback; `README.md`
@@ -167,7 +280,75 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   `CUBRIDdb` driver on the same server), and the Performance issue template no
   longer asks for a PyMySQL ratio. Docs only; the driver is unchanged.
 
+* **agents:** move stale planning context out of AGENTS.md ([#779](https://github.com/cubrid-lab/pycubrid/issues/779)) ([98acc87](https://github.com/cubrid-lab/pycubrid/commit/98acc8707dea72576c2394a3cd87487fe0e23871))
+* **aio:** correct Python version notes in TLS docstrings ([#824](https://github.com/cubrid-lab/pycubrid/issues/824)) ([b20a1b6](https://github.com/cubrid-lab/pycubrid/commit/b20a1b63a4f4e23527b44504924510a980cecefd))
+* **dev:** point the development guide to the current CI cost evidence ([#808](https://github.com/cubrid-lab/pycubrid/issues/808)) ([7d43169](https://github.com/cubrid-lab/pycubrid/commit/7d43169ee2beba9ecad700829a119460254389c3)), closes [#750](https://github.com/cubrid-lab/pycubrid/issues/750)
+* explain the executemany() gap against CUBRIDdb in the performance guide ([#838](https://github.com/cubrid-lab/pycubrid/issues/838)) ([f8d906d](https://github.com/cubrid-lab/pycubrid/commit/f8d906df0eb0ad0099e1e0342bf702937ae7ec2c))
+* name private vulnerability reporting as the preferred security channel ([#816](https://github.com/cubrid-lab/pycubrid/issues/816)) ([fe49031](https://github.com/cubrid-lab/pycubrid/commit/fe4903168c903c5680c44be3010bccd1a137da29)), closes [#751](https://github.com/cubrid-lab/pycubrid/issues/751)
+* **performance:** focus the guide on pycubrid on CUBRID and mark historical numbers ([#802](https://github.com/cubrid-lab/pycubrid/issues/802)) ([7cc4b20](https://github.com/cubrid-lab/pycubrid/commit/7cc4b20f5e0997d71da0568e35c3901358f45c1e)), closes [#795](https://github.com/cubrid-lab/pycubrid/issues/795)
+* publish the current performance baseline ([#823](https://github.com/cubrid-lab/pycubrid/issues/823)) ([35770b1](https://github.com/cubrid-lab/pycubrid/commit/35770b10346f4bae644e2af61da9b2550a39760a))
+* **python:** state the Python 3.11+ requirement in the connection guide and PRD ([#825](https://github.com/cubrid-lab/pycubrid/issues/825)) ([4f6c3ff](https://github.com/cubrid-lab/pycubrid/commit/4f6c3ff69393e23689e19850f548d32ce19f15fa))
+* **python:** state the Python 3.11+ requirement in the contributor and development guides ([#826](https://github.com/cubrid-lab/pycubrid/issues/826)) ([d727224](https://github.com/cubrid-lab/pycubrid/commit/d72722467c81cb690f002c921dc2e468110192fe)), closes [#700](https://github.com/cubrid-lab/pycubrid/issues/700)
+* **readme:** describe the full compatibility matrix as 4 × 4 on dispatch and release ([#803](https://github.com/cubrid-lab/pycubrid/issues/803)) ([d30bedb](https://github.com/cubrid-lab/pycubrid/commit/d30bedb55c74aa97b96a790f607d7c41967f06e3))
+* record the prepared batch evaluation for executemany() in the performance guide ([#843](https://github.com/cubrid-lab/pycubrid/issues/843)) ([6b28f5b](https://github.com/cubrid-lab/pycubrid/commit/6b28f5b943628bac0ddb2a7ac1508feebe40ef08))
+* **release:** list timed-out runs as rerunnable in the blocked-preparation recovery ([#800](https://github.com/cubrid-lab/pycubrid/issues/800)) ([2ff0d39](https://github.com/cubrid-lab/pycubrid/commit/2ff0d390c7241842a868d648971395c79f0ed7c3))
+* **release:** skip the green-publisher step for an abandoned release ([#806](https://github.com/cubrid-lab/pycubrid/issues/806)) ([f66e8de](https://github.com/cubrid-lab/pycubrid/commit/f66e8de1675e8f5dfa53d7e55d877f5d4e15d034)), closes [#801](https://github.com/cubrid-lab/pycubrid/issues/801)
+* **review:** specify tool-based review routes and thread closure ([#821](https://github.com/cubrid-lab/pycubrid/issues/821)) ([5f5fef1](https://github.com/cubrid-lab/pycubrid/commit/5f5fef17dd503140990dfbc13011ac37244ddd38))
+* update Python requirement in LLM index ([#804](https://github.com/cubrid-lab/pycubrid/issues/804)) ([0bc0a21](https://github.com/cubrid-lab/pycubrid/commit/0bc0a214cc48f12fb204a610581df95fd1060d8c))
+
 ### CI
+
+- **The cookbook verifies the built wheel before it is published
+  (cubrid-lab/cubrid-cookbook-python#240)** — `publish-pypi.yml` gains
+  `verify-candidate`, which calls the cookbook smoke test in candidate mode on the
+  `release-dist` wheel of the same run (exact file set and SHA-256 checked against
+  the `build` job's `sha256` output), and `require-candidate`, which requires
+  `status == success`, `evidence == candidate artifact`, installed == requested ==
+  the release version and the verified digest == the built wheel's digest, and
+  whose downloaded candidate report must name this package, request, run and
+  repository,
+  `release-dist`, the release commit and the build's file map. `publish` needs
+  `require-candidate` and now also checks `dist/` and
+  `release-meta/` against the `build` job outputs `sha256` and the new
+  `meta_sha256` (`scripts/verify_dist.py`) before tagging. The gate is never
+  skipped after a successful build, `resume` included: builds are not
+  reproducible, so every run that publishes verifies its own bytes (a
+  `gh run rerun --failed` of the same run keeps its earlier verification). A
+  `dry-run` dispatch now verifies the freshly built wheel instead of the
+  already-published version; the post-publication `verify-cookbook` is
+  unchanged. Both cookbook calls use one pin, moved to `98866c2`. sqlalchemy-cubrid
+  gets the same change. No runtime change.
+- **The PyPI duplicate guard uses `hashlib.file_digest()` (#742)** —
+  `scripts/pypi_duplicate_guard.py` hashes `dist/` files with the Python 3.11 stdlib
+  helper instead of a hand-written chunked read loop; the digests are the same. The
+  sqlalchemy-cubrid and cubrid-mcp-server copies get the same change, so the three stay
+  identical. No runtime change.
+- **Contributor tools moved from the published `dev` extra to dependency groups (#784)** —
+  the `dev` and `mutation` extras are gone from the package metadata, so the wheel
+  lists only the runtime dependency. `pyproject.toml` declares PEP 735 dependency
+  groups instead: `test`, `lint`, `security`, `release`, `docs` (the pins from the
+  removed `docs/requirements.txt`) and `mutation`, plus `dev`, which includes the
+  first four and resolves to the same packages the `dev` extra did. Each pin is
+  declared once and the workflows, `scripts/check_quality_tools.py` and the policy
+  tests read it from there. Contributors replace `pip install -e ".[dev]"` with
+  `pip install -e . --group dev` (pip 25.1 or later) or `make install`. No driver,
+  runtime dependency or supported-version change.
+- **Python 3.15 in the full matrix and as the newest offline endpoint** —
+  `integration-full.yml` runs the live suite on Python 3.11–3.15 × four CUBRID
+  versions (20 cells) and the TLS lane on Python 3.11, 3.14 and 3.15. The
+  oldest/newest offline cells of `ci.yml` (high-risk PRs, main pushes, the
+  weekly schedule, manual dispatch) and the release `offline-endpoints` move
+  from 3.11/3.14 to 3.11/3.15. The ordinary PR smoke (3.12) and the
+  representative live cells (3.14/11.4 and 3.11/10.2) are unchanged. A policy
+  test ties the offline endpoints and the full matrix to the declared
+  classifiers. The manual `python-canary.yml` lane is kept and renamed "Python 3.15
+  Packaging Check" (it no longer says 3.15 is unsupported); its install step is
+  the `test` and `release` dependency groups from #784.
+- **Tests that need the C decimal module skip without it** — CI's Python 3.15.0
+  has no `_decimal`, so the Decimal-subclass rendering tests are skipped there,
+  the parity round trip binds a plain `Decimal` instead (the collection test keeps its
+  other hostile element types and moves the Decimal element to its own case), and a new test checks
+  that such a Python rejects a Decimal subclass with `ProgrammingError`.
 - **Every workflow artifact has an explicit retention period (#750)** — the weekly SBOM
   upload had none and was kept for the repository default of 90 days, and
   `anchore/sbom-action` stored a second copy of the SBOM. `sbom.yml` now keeps the SBOM
@@ -329,6 +510,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   module needed a new mark; this is a test-only change.
 
 ### Tests
+
 - **Release-please push guards are pinned (#801)** — `tests/test_release_workflows.py`
   now asserts the exact, ordered guards of `release-please.yml`: the push is
   directly preceded by the stale-main `exit` and the `autorelease: review`

@@ -29,7 +29,7 @@ Everything you need to set up, test, and contribute to pycubrid.
 
 | Requirement   | Version  | Notes |
 |---------------|----------|-------|
-| Python        | 3.10+    | Uses `X | Y` union syntax, `match` statements |
+| Python        | 3.11+    | Matches `requires-python` in `pyproject.toml` |
 | Docker        | Latest   | Only for integration tests |
 | CUBRID Server | 10.2–11.4 | Via Docker or local install |
 
@@ -42,8 +42,8 @@ Everything you need to set up, test, and contribute to pycubrid.
 git clone https://github.com/cubrid-lab/pycubrid.git
 cd pycubrid
 
-# Install in development mode with dev dependencies
-pip install -e ".[dev]"
+# Install in development mode with the dev dependency group (pip 25.1+)
+pip install -e . --group dev
 
 # Or use the Makefile
 make install
@@ -307,7 +307,7 @@ lifecycle, LOB I/O) is configured under `[tool.mutmut]` in `pyproject.toml`, run
 against the offline suite:
 
 ```bash
-pip install -e ".[dev,mutation]"
+pip install -e . --group dev --group mutation
 make mutation          # mutmut run && mutmut results
 ```
 
@@ -450,7 +450,7 @@ pytest tests/ -m "integration and tls" -v
 
 You do not need to run the steps above locally for routine development —
 `.github/workflows/integration-full.yml` includes an `integration-tls` job
-(Python {3.11, 3.14} × CUBRID 11.4) that:
+(Python {3.11, 3.14, 3.15} × CUBRID 11.4) that:
 
 1. Starts a CUBRID 11.4 container manually (so the broker config can be
    patched after the container is up).
@@ -585,17 +585,18 @@ make tooling-check
 Make and regular/maintenance CI share the `LINT_PATHS` list in `Makefile`:
 `pycubrid tests scripts demos examples`. Ruff CLI discovery and hook types are explicitly
 Python/pyi-only; Markdown is outside this formatting contract. Hooks use the same maintained-file scope;
-Mypy remains strict and package-only. The tools run through the active Python
-environment, so install `.[dev]` and activate it before running checks.
+Mypy remains strict on the package. `make typecheck` and CI also check the
+`tests/typing_self_contract.py` static contract; the pre-commit hook checks `pycubrid/` only. The tools run through the active Python
+environment, so install the `dev` dependency group and activate it before running checks.
 
-`pyproject.toml` owns the exact Ruff/Mypy versions. The Ruff and Mypy pre-commit
+The `lint` dependency group in `pyproject.toml` owns the exact Ruff/Mypy versions. The Ruff and Mypy pre-commit
 hooks are `repo: local` / `language: system` hooks that invoke `python3 -m ruff`
 and `python3 -m mypy` against that same active environment, so there is no
-separate hook revision to keep in sync: bumping the dev pin (Dependabot's `pip`
-ecosystem does exactly this) and reinstalling `.[dev]` is enough. Activate that
+separate hook revision to keep in sync: bumping the `lint` group pin (Dependabot's `pip`
+ecosystem does exactly this) and reinstalling the `dev` group is enough. Activate that
 environment (or a venv where it's installed) whenever a commit should run the
 hooks; otherwise Ruff/Mypy are missing or a stale/global version silently runs
-instead of the pinned one. Update the dev pin, reinstall `.[dev]`, and run
+instead of the pinned one. Update the `lint` group pin, reinstall the `dev` group, and run
 `make check-all` plus `pre-commit run --all-files`. `make tooling-check` rejects
 pin, installed-version, hook-scope, and CI-scope drift before
 lint/format/typecheck.
@@ -890,10 +891,10 @@ assets; pinning its caller is not a complete freeze of those assets.
 Routine CI uses representative offline and live combinations rather than the
 full matrix. Ordinary PRs run offline smoke tests on Ubuntu/Python 3.12.
 High-risk PRs run the full existing offline regressions without coverage on the
-oldest and newest supported Python (3.11 and 3.14) and select newest
-integration. main, changed weekly runs and manual dispatches run the full offline
-suite with 95% coverage on Python 3.11 and 3.14 and use oldest/newest live
-endpoints. Repository
+oldest and newest supported Python (3.11 and 3.15) and select Python
+3.14/CUBRID 11.4 integration. main, changed weekly runs and manual dispatches run
+the full offline suite with 95% coverage on Python 3.11 and 3.15 and add Python
+3.11/CUBRID 10.2 integration. Repository
 tooling is path-selected on one Linux lane. Full integration is explicit/manual
 and release-only. See [CI execution policy](CI_POLICY.md) for exact selection and
 validation requirements.

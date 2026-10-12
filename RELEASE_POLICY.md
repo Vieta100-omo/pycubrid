@@ -115,7 +115,9 @@ modules are all permitted in minor releases.
 The selected [additive design](docs/UPSTREAM_COMPATIBILITY.md#selected-additive-contract-438)
 includes `pycubrid.compat.cubriddb` construction (#465) and autocommit access
 (#467), plus the bounded
-sync prepared INT32/string/NULL cursor in `pycubrid.compat.native` (#439),
+sync prepared INT32/string/NULL cursor in `pycubrid.compat.native` (#439;
+#840 widens its scalar binds to `bool`, BIGINT, DOUBLE, NUMERIC, DATE, TIME,
+DATETIME, DATETIMETZ and VARBIT),
 with its SET/MULTISET/SEQUENCE binding (`connection.set()`, `native.set`,
 `set.imports()`, `cursor.bind_set()`, #440) and BLOB/CLOB handle fetch and bind
 (`connection.lob()`, `native.lob`, `lob.close()`, `cursor.fetch_lob()`,
@@ -299,6 +301,33 @@ Code without a corresponding documentation update is considered incomplete.
 Backward-compatible bug fixes ship in a **PATCH** release (§2). Recorded here so
 the documented release contract stays complete alongside `CHANGELOG.md`:
 
+- **Wider typed prepared parameters (#840)** — MINOR / additive, within the
+  provisional `pycubrid.compat` namespace. `pycubrid.compat.native`
+  `cursor.bind_param()` accepts `bool`, 64-bit and up to 38-digit `int`,
+  `float`, `Decimal`, `date`, `time`, `datetime` and `bytes`/`bytearray`, which
+  raised `ProgrammingError` or `DataError` before; existing INT32, string and
+  NULL binds keep their exact bytes. New errors are confined to values that
+  were rejected before (`nan`/`inf` and more than 38 digits as in the literal
+  path; an empty `bytes` value raises `NotSupportedError`). As a consequence the
+  `pycubrid.compat.cubriddb` wrapper binds an `int` past signed 32-bit as BIGINT
+  or NUMERIC instead of raising `DataError`. The ordinary `pycubrid` and
+  `pycubrid.aio` cursors and the literal binding contract in
+  `docs/PARAMETER_BINDING.md` are unchanged; no signature changes.
+
+- **Python 3.15 support** — MINOR / additive supported-version change. The
+  package declares the `Programming Language :: Python :: 3.15` classifier
+  (`requires-python` stays `>=3.11`), and the full compatibility matrix runs
+  Python 3.11–3.15 × CUBRID 10.2/11.0/11.2/11.4 on manual dispatch and every
+  release. The newest offline endpoint moves from 3.14 to 3.15. Standard GIL
+  builds only; free-threaded builds are not supported. No driver API change.
+
+- **`charset="ksc5601"` keeps meaning EUC-KR on Python 3.15** — PATCH /
+  compatibility fix. Python 3.15 maps its `ksc5601` codec alias to CP949, which
+  pycubrid rejects as not ASCII-transparent, so `charset="ksc5601"` raised
+  `ValueError` there. pycubrid now maps `ksc5601` to EUC-KR itself, as on
+  Python 3.11–3.14. Other Python KS C 5601 aliases (such as `ks_c_5601` and
+  `korean`) follow the running Python's codec table. No signature change.
+
 - **Registered PyPI publisher identity** — PATCH / CI configuration correction.
   The sole guarded release orchestrator uses `publish-pypi.yml`, matching the
   existing `cubrid-lab/pycubrid` Trusted Publisher and `pypi` environment. Its
@@ -322,6 +351,14 @@ the documented release contract stays complete alongside `CHANGELOG.md`:
   operation, so neither the TCP connect nor the first handshake bytes are
   issued and the connect fails with `OperationalError`. No public API changes;
   the sync driver is unaffected.
+
+- **Contributor tools in dependency groups (#784)** — packaging metadata /
+  PATCH eligible. The `dev` and `mutation` extras, which only installed test,
+  lint, release and mutation tools, are removed from the published metadata and
+  replaced by PEP 735 dependency groups in `pyproject.toml`. Installing
+  `pycubrid[dev]` from PyPI now installs only the driver and its runtime
+  dependency; contributors use `pip install -e . --group dev`. No driver
+  behavior, public API, runtime dependency or supported-version change.
 
 - **README Quick Start examples (#327)** — documentation-only / PATCH eligible.
   Parameterized CRUD, DML commit/rollback and `ProgrammingError` examples use a

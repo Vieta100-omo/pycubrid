@@ -6,10 +6,10 @@ Routine CI uses representative combinations instead of a Cartesian version/OS ma
 | --- | --- |
 | Documentation-only PR | Documentation and policy checks; no runtime suite or CUBRID provisioning |
 | Ordinary code PR | One Ubuntu/Python 3.12 offline smoke lane; no full coverage claim |
-| High-risk PR | Full offline regressions without coverage on Python 3.11 and 3.14, plus Python 3.14/CUBRID 11.4; targeted additional lanes where relevant |
-| Code push to main | Full offline suite on Ubuntu/Python 3.11 and 3.14, each with the existing 95% coverage floor; oldest/newest live endpoints |
-| Monday 03:00 UTC | Same policy as a main push (including the Python 3.11/3.14 offline suite), comparing changes in the previous seven days; unchanged/docs-only history does not select runtime tests, and lanes a successful push run of the same SHA already ran are not repeated (see [Event tiers and cost evidence](#event-tiers-and-cost-evidence)) |
-| Explicit full dispatch or release | Existing full Python 3.11–3.14 × CUBRID 10.2/11.0/11.2/11.4 integration workflow and mandatory release lanes, plus the Python 3.11/3.14 offline suite with the 95% floor, lint, type checking, the public API baseline and the repository tooling tests |
+| High-risk PR | Full offline regressions without coverage on Python 3.11 and 3.15, plus Python 3.14/CUBRID 11.4; targeted additional lanes where relevant |
+| Code push to main | Full offline suite on Ubuntu/Python 3.11 and 3.15, each with the existing 95% coverage floor; live endpoints Python 3.14/CUBRID 11.4 and Python 3.11/CUBRID 10.2 |
+| Monday 03:00 UTC | Same policy as a main push (including the Python 3.11/3.15 offline suite), comparing changes in the previous seven days; unchanged/docs-only history does not select runtime tests, and lanes a successful push run of the same SHA already ran are not repeated (see [Event tiers and cost evidence](#event-tiers-and-cost-evidence)) |
+| Explicit full dispatch or release | Existing full Python 3.11–3.15 × CUBRID 10.2/11.0/11.2/11.4 integration workflow and mandatory release lanes, plus the Python 3.11/3.15 offline suite with the 95% floor, lint, type checking, the public API baseline and the repository tooling tests |
 
 The PR smoke suite is deliberately bounded. Contributors must run the regression
 checks relevant to their change locally and record commands/results in the PR.
@@ -144,9 +144,9 @@ Median per-job runner minutes on successful code pushes:
 
 | Coverage | Owner (workflow / job) | Event tier |
 | --- | --- | --- |
-| Offline suite, 95% floor | `ci.yml` `offline-tests`; `integration-full.yml` `offline-endpoints` | Ordinary PR: 3.12 smoke. Risk PR: 3.11 + 3.14 without coverage. Main push, weekly, dispatch: 3.11 + 3.14. Release and full dispatch: 3.11 + 3.14 |
-| Live endpoints | `ci.yml` `integration-tests`; `integration-full.yml` `integration-full` (4 × 4) | Risk PR: 3.14/11.4. Main push, weekly, dispatch: plus 3.11/10.2. Release and full dispatch: all 16 cells |
-| TLS | `ci.yml` `integration-tls` (3.14/11.4); `integration-full.yml` `integration-tls` (3.11 + 3.14) | TLS-path PR, non-PR code; release and full dispatch |
+| Offline suite, 95% floor | `ci.yml` `offline-tests`; `integration-full.yml` `offline-endpoints` | Ordinary PR: 3.12 smoke. Risk PR: 3.11 + 3.15 without coverage. Main push, weekly, dispatch: 3.11 + 3.15. Release and full dispatch: 3.11 + 3.15 |
+| Live endpoints | `ci.yml` `integration-tests`; `integration-full.yml` `integration-full` (5 × 4) | Risk PR: 3.14/11.4. Main push, weekly, dispatch: plus 3.11/10.2. Release and full dispatch: all 20 cells |
+| TLS | `ci.yml` `integration-tls` (3.14/11.4); `integration-full.yml` `integration-tls` (3.11 + 3.14 + 3.15) | TLS-path PR, non-PR code; release and full dispatch |
 | EUC-KR charset | `ci.yml` and `integration-full.yml` `integration-charset` | Charset-path PR, non-PR code; release and full dispatch |
 | Official CUBRIDdb differential | `ci.yml` and `integration-full.yml` `official-differential` | Official-path PR, non-PR code; release and full dispatch |
 | CUBRID version differential | `integration-full.yml` `version-differential` | Release and full dispatch |
@@ -159,7 +159,7 @@ Median per-job runner minutes on successful code pushes:
 | Public API baseline | `ci.yml` `compat-check`; `integration-full.yml` `compat-check` (same steps) | Every code event; release and full dispatch |
 | Packaging | `ci.yml` `packaging-smoke-test`; `publish-pypi.yml` `consistency` and `build` | Risk PR, non-PR code; release |
 | Repository tooling | `ci.yml` `repo-tooling-tests`; `integration-full.yml` `repo-tooling-tests` (same steps) | Tooling-path events; release and full dispatch |
-| Python 3.15 preview (advisory) | `python-canary.yml` | Manual only |
+| Python 3.15 packaging check (advisory) | `python-canary.yml` | Manual only |
 
 ### Consolidation
 
@@ -189,7 +189,7 @@ Median per-job runner minutes on successful code pushes:
     the previous 7 days.
   - **No duplicate to remove.** Its `integration and not slow and not tls`
     session uses Python 3.12 and the wide Hypothesis profile. That makes it a
-    different cell and profile from `ci.yml`'s 3.11/3.14 cells, so it stays.
+    different cell and profile from `ci.yml`'s 3.11/3.15 cells, so it stays.
 - **The release-merge overlap is kept.**
   - **The overlap.** On a release commit, the `ci.yml` push run's live lanes
     (`integration-tests` 3.14/11.4 and 3.11/10.2, TLS 3.14/11.4, charset,
@@ -230,8 +230,8 @@ the `ci.yml` push run.
   group cancels an older push run when a newer push arrives. That happened to
   16 push runs since 2026-09-01.
 
-`integration-full.yml` now runs `offline-endpoints`. It uses Python 3.11 and
-3.14 with the same install and pytest command as `ci.yml` `offline-tests`, at
+`integration-full.yml` now runs `offline-endpoints`. It uses the same Python
+versions as `ci.yml` (3.11 and 3.15, the oldest and newest supported) with the same install and pytest command as `ci.yml` `offline-tests`, at
 the exact SHA. `full-matrix-result` requires it. This adds about 2.9 runner
 minutes per release.
 
@@ -260,15 +260,15 @@ From the per-job medians above, the copies add about 1.5 runner minutes
 ## Offline endpoint versions
 
 The `offline-tests` job picks its Python matrix from the event (#745), so the
-full offline suite runs on the oldest (3.11) and newest (3.14) supported Python
+full offline suite runs on the oldest (3.11) and newest (3.15) supported Python
 wherever it already ran in full, while ordinary PRs stay on one cheap cell.
 
 | Event | `offline-tests` cells | Suite |
 | --- | --- | --- |
 | Ordinary code PR (`risk` not selected) | Python 3.12 | Representative smoke tests |
-| Risk-selected PR | Python 3.11 and 3.14 | Full offline suite, no coverage |
-| Push to main, Monday schedule, manual dispatch | Python 3.11 and 3.14 | Full offline suite with the 95% coverage floor |
-| Release and full dispatch (`integration-full.yml` `offline-endpoints`) | Python 3.11 and 3.14 | Same install and command, required by `full-matrix-result` |
+| Risk-selected PR | Python 3.11 and 3.15 | Full offline suite, no coverage |
+| Push to main, Monday schedule, manual dispatch | Python 3.11 and 3.15 | Full offline suite with the 95% coverage floor |
+| Release and full dispatch (`integration-full.yml` `offline-endpoints`) | Python 3.11 and 3.15 | Same install and command, required by `full-matrix-result` |
 
 Every cell keeps the `not integration and not repo_tooling` selection, the
 15-minute timeout and the immutable `inputs.sha || github.sha` checkout. In
@@ -374,20 +374,22 @@ version log, and that no other `pip install` remains in these workflows.
 
 ## Pinned documentation tools and scan concurrency
 
-`docs.yml` installs the site tools only from `docs/requirements.txt`, which pins
-`mkdocs`, `mkdocs-material` and `pymdown-extensions` to exact versions (#782), so an
+`docs.yml` installs the site tools only from the `docs` dependency group in
+`pyproject.toml` (`pip install --group docs`, after upgrading pip to a release that
+supports `--group`), which pins `mkdocs`, `mkdocs-material` and `pymdown-extensions`
+to exact versions (#782, moved from `docs/requirements.txt` in #784), so an
 upstream release cannot break the `mkdocs build --strict` gate without a repository
-change. Dependabot (pip, `/docs`) proposes updates, and `mkdocs.yml` excludes the file
-from the published site.
+change. Dependabot's root `pip` entry proposes updates with the other
+`pyproject.toml` pins.
 
 `ci.yml` also builds the site on pull requests (#786), so a bump or a docs edit that
 breaks `mkdocs build --strict` fails before merge instead of later on `main`. The
 `docs-build` job is selected by the `site` path filter: `docs/**` (content and
-`docs/requirements.txt`), `mkdocs.yml`, `scripts/generate_llms_full.py`,
+nav assets), `pyproject.toml` (the `docs` group), `mkdocs.yml`, `scripts/generate_llms_full.py`,
 `.github/workflows/docs.yml` and `.github/workflows/ci.yml`. Root `*.md` files are not
 site inputs (the changelog is linked, not staged), so they do not select it, and
 `workflow_dispatch` forces it like the other lanes. The job runs the `docs.yml` build
-steps (install from `docs/requirements.txt`, `scripts/generate_llms_full.py`,
+steps (install the `docs` group, `scripts/generate_llms_full.py`,
 `mkdocs build --strict`) with read-only permissions, pinned actions, a 10-minute timeout
 and `persist-credentials: false`; it never uploads a Pages artifact or deploys. The
 `CI Gate` expects `docs-build` to succeed exactly when `site` is selected and accepts a
@@ -448,3 +450,11 @@ regressions and validates fresh wheel/sdist installs. Failed setup/install/tests
 fail the run normally. It is separate from required PR checks and release gates;
 there is no new schedule, PR matrix cell or CUBRID provisioning. This lane alone
 does not establish official support, live database or free-threaded compatibility.
+
+Python 3.15 is now supported (see the [support matrix](SUPPORT_MATRIX.md)). Its
+support evidence comes from the full compatibility matrix (live Python 3.15 ×
+four CUBRID versions and TLS), the 3.15 offline endpoint cells and this lane's
+fresh wheel/sdist installs; the lane is kept as a manual packaging check. The
+3.11 offline endpoint is unchanged; the representative live cells stay on Python
+3.14/CUBRID 11.4 and Python 3.11/CUBRID 10.2, and Python 3.14 is still exercised
+live on every high-risk PR and in the full matrix.

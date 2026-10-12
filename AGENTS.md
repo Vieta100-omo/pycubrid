@@ -86,6 +86,19 @@ bytes even after a complete element raises DataError (#595). Later structural
 damage wins; complete collections retain the first conversion error. Opaque
 and unsupported nested member layouts keep their existing raw-byte contracts.
 
+Scalar FC3 binds (`_encode_prepared_scalar`, public through `compat.native`
+`bind_param()`; #439, widened by #840) send one type byte and its value bytes:
+INT `8` (int32; `bool` as 1/0), BIGINT `21` (int64), NUMERIC `7` (ASCII
+fixed-point text plus NUL, a lone leading `0` dropped because the CAS counts
+every character but sign and point as precision; also ints past int64 up to
+38 digits), DOUBLE `12` (finite only; the broker stores NaN), CHAR `1`
+(charset bytes plus NUL), DATE `13`/TIME `14`/DATETIME `22` (always the
+14-byte seven-int16 layout: the CAS reads TIME at offset 6 without a length
+check), DATETIMETZ `31` (those 14 bytes plus the literal path's zone text, no
+NUL: a NUL breaks region names, -1162), VARBIT `6` (non-empty: a zero-length
+value is read as NULL) and NULL `0`. Dispatch on `type(value)` and read values
+through base-class methods, as the literal path does (#518, #528).
+
 Typed collection FC3 binds (#482; public only through `compat.native`
 `set.imports()`/`bind_set()`, #440) send
 the kind byte (SET `16`, MULTISET `17`, SEQUENCE `18`) as the type argument
@@ -190,7 +203,7 @@ heterogeneous failover.
 ```bash
 git clone https://github.com/cubrid-lab/pycubrid.git
 cd pycubrid
-make install          # pip install -e ".[dev]"
+make install          # pip install -e . --group dev (pip 25.1+)
 ```
 
 ### Key Commands
@@ -329,8 +342,9 @@ Version is single-sourced from `pycubrid/__init__.py` → `__version__ = "x.y.z"
 normal way to release: `release-please.yml` opens it (curated + Conventional Commit dated CHANGELOG section +
 version bump, checked by `make release-check VERSION=x.y.z`), and after the
 squash-merge `publish-pypi.yml` detects the version change and runs consistency → full
-matrix → build → tag/Release/PyPI → cookbook verification (the cookbook smoke test
-called as a pinned reusable workflow, no token) → summary on its own.
+matrix → build → candidate verification (the cookbook smoke test in candidate mode on
+the built wheel; `publish` needs it) → tag/Release/PyPI → cookbook verification (the
+cookbook smoke test called as a pinned reusable workflow, no token) → summary on its own.
 Freeze a release candidate with `autorelease: review` before branch-only note edits; wait for in-flight preparation to finish. Unfrozen notes come from main Unreleased. GITHUB_TOKEN updates require maintainer-triggered CI at the final head. Pending labels are reconciled only after successful publication and cookbook verification.
 Ordinary PRs never change `__version__` or date a CHANGELOG section. Never push
 tags or publish by hand; the only manual entry point is the narrow recovery
@@ -399,7 +413,7 @@ These rules add to the release procedure above; the procedures and gates in
 - High-risk PR offline and integration: full existing regressions on the oldest and
   newest supported Python, plus targeted live lanes.
 - main, changed-weekly and dispatch: full offline suite with coverage on the oldest and
-  newest supported Python, oldest/newest live endpoints.
+  newest supported Python, live Python 3.14/CUBRID 11.4 and 3.11/CUBRID 10.2.
 - Full integration: manual and every release; no automatic nightly full matrix.
 - Exact Python/CUBRID versions, change classification and gate requirements live in
   the [CI policy](docs/CI_POLICY.md) and the workflow files; do not copy them here.
@@ -469,6 +483,18 @@ graph TD
 ```
 
 ## Issue specification and ownership
+
+Issues and implementation acceptance are repository-local: file work in the
+repository whose code, workflow, or documentation must change. Each repository
+owns its scope, priority, assignee, validation, release decision and closure.
+Every issue must be understandable without opening another repository's issue.
+Cross-repository links are allowed as technical references (Refs owner/repo#N),
+but do not transfer work or require another repository to close its issue.
+For changes to several repositories, create independent local issues and PRs.
+Never use issue auto-closing keywords with another repository's issue; its
+maintainer controls closure. The existing required PR title check rejects
+direct foreign-repository closing references in the PR body, the PR title and
+commit messages (which form the squash commit) while allowing Refs links.
 
 An issue body is the current work specification, not a session transcript.
 Before implementation, maintainers/agents must ensure it states the problem

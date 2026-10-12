@@ -31,7 +31,7 @@ pycubrid를 설정·테스트·기여하는 데 필요한 모든 것.
 
 | 요구사항      | 버전    | 비고 |
 |---------------|---------|------|
-| Python        | 3.10+   | `X \| Y` 유니언 구문, `match` 문 사용 |
+| Python        | 3.11+   | `pyproject.toml`의 `requires-python`과 동일 |
 | Docker        | 최신    | 통합 테스트에만 필요 |
 | CUBRID Server | 10.2–11.4 | Docker 또는 로컬 설치 |
 
@@ -44,8 +44,8 @@ pycubrid를 설정·테스트·기여하는 데 필요한 모든 것.
 git clone https://github.com/cubrid-lab/pycubrid.git
 cd pycubrid
 
-# dev 의존성과 함께 개발 모드로 설치
-pip install -e ".[dev]"
+# dev 의존성 그룹과 함께 개발 모드로 설치(pip 25.1 이상)
+pip install -e . --group dev
 
 # 또는 Makefile 사용
 make install
@@ -295,7 +295,7 @@ CAS 세션으로 보냈습니다. 이제 `COMMIT` 전에 새 값을 기록하므
 설정되어 있으며 오프라인 스위트를 대상으로 실행합니다:
 
 ```bash
-pip install -e ".[dev,mutation]"
+pip install -e . --group dev --group mutation
 make mutation          # mutmut run && mutmut results
 ```
 
@@ -417,7 +417,7 @@ pytest tests/ -m "integration and tls" -v
 
 ##### CI의 자동화된 TLS 커버리지
 
-일상 개발에서 위 단계를 로컬로 실행할 필요는 없습니다 — `.github/workflows/integration-full.yml`에 다음을 수행하는 `integration-tls` 잡(Python {3.11, 3.14} × CUBRID 11.4)이 포함되어 있습니다:
+일상 개발에서 위 단계를 로컬로 실행할 필요는 없습니다 — `.github/workflows/integration-full.yml`에 다음을 수행하는 `integration-tls` 잡(Python {3.11, 3.14, 3.15} × CUBRID 11.4)이 포함되어 있습니다:
 
 1. CUBRID 11.4 컨테이너를 수동으로 시작 (컨테이너 기동 후 브로커 설정을 패치할 수 있도록).
 2. 새 자가 서명 인증서를 생성하고(`CN=localhost`, `SAN=DNS:localhost`), `cas_ssl_cert.{crt,key}`로 컨테이너에 주입한 뒤 `BROKER1`의 `SSL=OFF` → `SSL=ON`으로 전환하고 브로커를 재시작해 새 인증서가 반영되게 함.
@@ -541,17 +541,18 @@ make tooling-check
 Make와 일반/정기 CI는 `Makefile`의 `LINT_PATHS` 목록을 공유합니다:
 `pycubrid tests scripts demos examples`. Ruff CLI와 훅은 명시적으로 Python/pyi만 검사하므로
 Markdown은 이 포맷 범위에 포함하지 않습니다. 훅에도 같은 관리 파일 범위를 적용하며,
-Mypy는 기존의 엄격한 패키지 전용 검사를 유지합니다. 검사는 현재 Python 환경의
-도구를 사용하므로 `.[dev]`를 설치하고 해당 환경을 활성화하세요.
+Mypy는 패키지에 대한 엄격한 검사를 유지합니다. `make typecheck`와 CI는
+`tests/typing_self_contract.py` 정적 계약도 검사하며, pre-commit 훅은 `pycubrid/`만 검사합니다. 검사는 현재 Python 환경의
+도구를 사용하므로 `dev` 의존성 그룹을 설치하고 해당 환경을 활성화하세요.
 
-Ruff/Mypy의 정확한 버전은 `pyproject.toml`에서 관리합니다. Ruff와 Mypy
+Ruff/Mypy의 정확한 버전은 `pyproject.toml`의 `lint` 의존성 그룹에서 관리합니다. Ruff와 Mypy
 pre-commit 훅은 `repo: local` / `language: system` 훅으로, 같은 활성 환경에서
 `python3 -m ruff`와 `python3 -m mypy`를 직접 호출합니다. 따라서 별도로 맞춰야 할
-훅 리비전이 없습니다: dev 핀을 올리고(Dependabot의 `pip` 생태계가 정확히 이
-작업을 수행합니다) `.[dev]`를 다시 설치하면 충분합니다. 커밋 시 훅이 실행되길
+훅 리비전이 없습니다: `lint` 그룹 핀을 올리고(Dependabot의 `pip` 생태계가 정확히 이
+작업을 수행합니다) `dev` 그룹을 다시 설치하면 충분합니다. 커밋 시 훅이 실행되길
 원한다면 그 환경(또는 이를 설치한 venv)을 항상 활성화해두세요. 그렇지 않으면
 Ruff/Mypy가 없거나, 고정된 버전 대신 오래되거나 전역에 설치된 버전이 조용히
-실행됩니다. dev 핀을 갱신하고 `.[dev]`를 다시 설치한 뒤 `make check-all` 및
+실행됩니다. `lint` 그룹 핀을 갱신하고 `dev` 그룹을 다시 설치한 뒤 `make check-all` 및
 `pre-commit run --all-files`를 실행하세요. `make tooling-check`는 린트/포맷/타입
 검사 전에 핀, 설치 버전, 훅 범위 및 CI 범위의 불일치를 실패 처리합니다.
 
@@ -824,10 +825,10 @@ main 기반 설정/스캐너를 내려받으므로 호출자 핀만으로 이 �
 
 일상 CI는 전체 매트릭스 대신 대표 오프라인·통합 조합을 사용합니다. 일반 PR은
 Ubuntu/Python 3.12에서 오프라인 스모크 검사를 실행합니다. 고위험 PR은 지원 범위의
-최저·최신 Python(3.11, 3.14)에서 전체 오프라인 회귀 검사(커버리지 제외)를 실행하고
-최신 통합 조합을 선택합니다. main, 최근 변경이 있는 주간 실행과 수동 실행은
-Python 3.11과 3.14에서 전체 오프라인 검사와 95% 커버리지를 유지하고 최저·최신
-통합 조합을 사용합니다. 저장소 도구 검사는 관련 경로에
+최저·최신 Python(3.11, 3.15)에서 전체 오프라인 회귀 검사(커버리지 제외)를 실행하고
+Python 3.14/CUBRID 11.4 통합 조합을 선택합니다. main, 최근 변경이 있는 주간 실행과
+수동 실행은 Python 3.11과 3.15에서 전체 오프라인 검사와 95% 커버리지를 유지하고
+Python 3.11/CUBRID 10.2 통합 조합을 추가합니다. 저장소 도구 검사는 관련 경로에
 따라 Linux 단일 레인에서 실행합니다. 전체 통합 검사는 명시적 수동 실행과
 릴리스에서 유지합니다. 정확한 선택 조건과 검증 요건은 [CI 실행 정책](CI_POLICY.md)을
 참고하세요.

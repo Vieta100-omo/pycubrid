@@ -11,7 +11,7 @@ GitHub 이슈, PR과 댓글은 영어로 작성하세요. 현지화 문서 기�
 
 ### 사전 준비
 
-- Python 3.10+
+- Python 3.11+
 - Git
 - Docker (통합 테스트용)
 
@@ -24,8 +24,17 @@ cd pycubrid
 python3 -m venv venv
 source venv/bin/activate
 
-pip install -e ".[dev]"
+# 기여자 도구는 extra가 아니라 pyproject.toml의 PEP 735 의존성 그룹이므로
+# `--group`에는 pip 25.1 이상이 필요합니다(`uv pip install -e . --group dev`도 됩니다).
+python -m pip install --upgrade pip
+pip install -e . --group dev
 ```
+
+`dev` 그룹은 `test`, `lint`, `security`, `release` 그룹을 포함합니다. 특정 도구만
+필요하면 해당 그룹만 설치하세요. 예를 들어 문서 사이트는 `pip install --group docs`,
+뮤테이션 테스트는 `pip install -e . --group dev --group mutation`입니다. 이전의
+`pip install -e ".[dev]"` extra는 더 이상 없으며 `pip install -e . --group dev`로
+대체되었습니다(#784).
 
 ## 테스트 실행
 
@@ -79,7 +88,7 @@ make format
 ```
 
 Make나 pre-commit을 실행하기 전에 프로젝트 개발 환경
-(`pip install -e ".[dev]"`)을 활성화하세요. Ruff와 Mypy pre-commit 훅은
+(`pip install -e . --group dev`)을 활성화하세요. Ruff와 Mypy pre-commit 훅은
 `repo: local`, `language: system`이며, 같은 활성 환경에서
 `python3 -m ruff`/`python3 -m mypy`를 실행합니다. 각 도구 버전의 단일 기준은
 `pyproject.toml`에 고정된 정확한 버전입니다. 커밋할 때 훅을 실행하려면 이 환경이나
@@ -88,11 +97,12 @@ Make나 pre-commit을 실행하기 전에 프로젝트 개발 환경
 `make tooling-check`는 설치된 Ruff/Mypy 버전과 고정값을 비교하고 훅이 활성
 환경을 통해 실행되는지 확인합니다. Make와 CI는 명시적인 Python/pyi 검색과 훅
 타입을 사용하며 `LINT_PATHS` (`pycubrid tests scripts demos
-examples`)를 공유하므로 Markdown을 다시 포맷하지 않습니다. 패키지 전용 strict
-Mypy는 별도이며, pre-commit 훅도 명시적으로 `pycubrid/`를 검사합니다.
+examples`)를 공유하므로 Markdown을 다시 포맷하지 않습니다. strict Mypy(패키지와
+`make typecheck`의 `tests/typing_self_contract.py` 정적 계약)는 별도이며, pre-commit
+훅도 명시적으로 `pycubrid/`를 검사합니다.
 
-도구를 갱신하려면 `pyproject.toml`의 개발 버전 고정값을 변경하고 `.[dev]`를
-다시 설치한 뒤 `make check-all`과 `pre-commit run --all-files`를 실행하세요.
+도구를 갱신하려면 `pyproject.toml`의 `lint` 의존성 그룹에 있는 버전 고정값을 변경하고
+`dev` 그룹을 다시 설치한 뒤 `make check-all`과 `pre-commit run --all-files`를 실행하세요.
 별도로 수정할 훅 revision은 없습니다. 드리프트 게이트는 누락·모호한 고정값,
 고정값과 다른 설치 버전, 좁아진 검사 범위를 거부합니다. Dependabot의 `pip`
 생태계는 `pyproject.toml` 고정값만 갱신할 수 있으며, pre-commit 훅이 항상 설치된
@@ -131,7 +141,7 @@ Oracle/에이전트 검토, 통합 검증과 릴리스 분류를 조율합니다
 문서를 변경하면 `python scripts/generate_llms_full.py`로 `docs/llms-full.txt`를
 다시 생성하세요. 이 명령은 표준 `docs/llms.txt` 인덱스도 루트 `llms.txt`에
 복사합니다. `docs/llms.txt`만 편집하고, 생성 파일 중 하나라도 오래되면 CI가
-실패합니다. 고정된 도구(`pip install -r docs/requirements.txt`)를 설치한 뒤
+실패합니다. 고정된 도구(`pip install --group docs`)를 설치한 뒤
 기존 사이트 검사 `mkdocs build --strict`를 실행하세요. AI 검토 의견과 실제로
 실행한 명령은 별개입니다. 빠진 검증과 기존 경고를 포함해 모두 정확히 보고하세요.
 
@@ -139,6 +149,19 @@ Oracle/에이전트 검토, 통합 검증과 릴리스 분류를 조율합니다
 그 커밋의 대상 워크플로와 `workflow_call` 입력을 확인하고 호출부를 함께 갱신한
 뒤 필수 검사를 실행합니다. 공유 doc-lint 워크플로는 여전히 main 기반의 설정·
 스캐너 자산을 가져오므로, 호출부 SHA 고정이 그 자산까지 고정하지는 않습니다.
+
+## 저장소별 이슈 소유권
+
+각 저장소는 자신의 코드·CI·문서 변경에 필요한 이슈, 우선순위, 담당자,
+검증 조건 및 종료 여부를 독립적으로 관리합니다. 다른 저장소의 이슈를 읽지
+않아도 작업 범위와 완료 조건을 이해할 수 있도록 작성하세요. 실제 기술적
+의존성이나 호환성 계약이 있는 경우에만 `Refs owner/repo#N`으로 참조하며
+다른 저장소의 우선순위나 종료 상태를 가져오지 않습니다. 완료한 현재 저장소의 이슈만
+`Closes #N`으로 연결하세요. 연결할 현재 저장소 이슈가 없는 PR은 N/A와 그
+이유를 적을 수 있습니다. 기존 필수 `PR title` 검사는 PR 본문, PR 제목과
+커밋 메시지(제목과 커밋 메시지가 squash 커밋을 구성함)에서 다른 저장소 이슈를 자동
+종료하려는 직접 참조를 차단합니다. 본문의 코드와 주석은 무시하고, 제목과 커밋
+메시지는 일반 텍스트로 읽습니다. 외부 기여자에게 내부 AI 도구 설치나 중복 작업을 요구하지 않습니다.
 
 <a name="pull-request-and-commit-titles"></a>
 

@@ -32,6 +32,7 @@ from .test_param_security import (
     _HostileStr,
     _HostileTime,
     _spoof,
+    requires_c_decimal,
 )
 
 _KINDS = [(Set, "SET"), (Multiset, "MULTISET"), (Sequence, "SEQUENCE")]
@@ -206,7 +207,6 @@ class TestHostileElements:
         elements = [
             _HostileInt(1),
             _HostileFloat(2.5),
-            _HostileDecimal("3.25"),
             _HostileStr("it's"),
             _HostileBytes(b"\x01"),
             _HostileByteArray(b"\x02"),
@@ -216,9 +216,16 @@ class TestHostileElements:
         ]
         rendered = format_parameter(kind(elements), no_backslash_escapes=no_backslash_escapes)
         assert rendered == (
-            "%s{1, 2.5, 3.25, 'it''s', X'01', X'02', DATE'2024-01-02', TIME'03:04:05', "
+            "%s{1, 2.5, 'it''s', X'01', X'02', DATE'2024-01-02', TIME'03:04:05', "
             "DATETIME'2024-01-02 03:04:05.000'}" % keyword
         )
+        assert "DROP" not in rendered
+
+    @requires_c_decimal
+    @pytest.mark.parametrize("kind, keyword", _KINDS)
+    def test_hostile_decimal_subclass_element(self, kind: Any, keyword: str) -> None:
+        rendered = format_parameter(kind([1, _HostileDecimal("3.25")]))
+        assert rendered == "%s{1, 3.25}" % keyword
         assert "DROP" not in rendered
 
     @pytest.mark.parametrize("kind", [Set, Multiset, Sequence])

@@ -9,7 +9,7 @@ welcome, and no specific translation tool is required.
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - Git
 - Docker (for integration tests)
 
@@ -22,8 +22,18 @@ cd pycubrid
 python3 -m venv venv
 source venv/bin/activate
 
-pip install -e ".[dev]"
+# Contributor tools are PEP 735 dependency groups in pyproject.toml, not extras,
+# so `--group` needs pip 25.1 or later (`uv pip install -e . --group dev` also works).
+python -m pip install --upgrade pip
+pip install -e . --group dev
 ```
+
+The `dev` group includes the `test`, `lint`, `security` and `release` groups.
+Install a single group when only that tool set is needed, for example
+`pip install --group docs` for the documentation site or
+`pip install -e . --group dev --group mutation` for mutation testing. The former
+`pip install -e ".[dev]"` extra no longer exists; it is replaced by
+`pip install -e . --group dev` (#784).
 
 ## Running Tests
 
@@ -77,7 +87,7 @@ To auto-fix:
 make format
 ```
 
-Activate the project development environment (`pip install -e ".[dev]"`) before
+Activate the project development environment (`pip install -e . --group dev`) before
 running Make or pre-commit. The Ruff and Mypy pre-commit hooks are `repo: local`,
 `language: system` hooks that invoke `python3 -m ruff`/`python3 -m mypy` from that
 same active environment, so there is a single source of truth for each tool's
@@ -88,11 +98,12 @@ pinned one. `make tooling-check` verifies the installed Ruff/Mypy versions
 against those pins and confirms the hooks are wired to run through the active
 environment. Make and CI share `LINT_PATHS` (`pycubrid tests scripts demos
 examples`) with explicit Python/pyi discovery and hook types, so Markdown is not
-reformatted; package-only strict Mypy remains separate, and its pre-commit hook
+reformatted; strict Mypy (the package plus the `tests/typing_self_contract.py`
+static contract in `make typecheck`) remains separate, and its pre-commit hook
 explicitly checks `pycubrid/`.
 
-When updating either tool, change its dev pin in `pyproject.toml`, reinstall
-`.[dev]`, then run `make check-all` and `pre-commit run --all-files`; there is no
+When updating either tool, change its pin in the `lint` dependency group of `pyproject.toml`,
+reinstall the `dev` group, then run `make check-all` and `pre-commit run --all-files`; there is no
 separate hook revision to edit. The drift gate rejects missing/ambiguous pins,
 an installed version that no longer matches the pin, and narrowed scopes.
 Dependabot's `pip` ecosystem can bump the `pyproject.toml` pin on its own and CI
@@ -147,13 +158,27 @@ When changing docs, regenerate `docs/llms-full.txt` with
 `docs/llms.txt` index to the root `llms.txt`; edit only `docs/llms.txt`, and CI
 fails if either generated file is stale) and run the existing site check
 `mkdocs build --strict` after installing its documented tooling
-(`pip install -r docs/requirements.txt`). AI review feedback is separate from commands
+(`pip install --group docs`). AI review feedback is separate from commands
 actually executed; report both accurately, including gaps and existing warnings.
 
 Maintainers update shared workflow callers through a reviewed upstream commit SHA:
 verify the target workflow and its `workflow_call` inputs at that commit, update
 callers together and run required checks. The shared doc-lint workflow still fetches
 main-based configuration/scanner assets, so caller pinning does not freeze those assets.
+
+## Repository-local issue ownership
+
+Issues own implementation and acceptance in the repository whose files change.
+Provide a self-contained local problem, scope, owner, tests, and closure decision.
+Sibling repositories may be cited with Refs owner/repo#N when they supply a real
+dependency or compatibility contract; their priorities and completion are not
+inherited. Close only this repository's issues (Closes #N). PRs with no local
+issue may state N/A and a reason. The existing PR title check rejects direct
+cross-repository issue-closing keywords in the PR body, the PR title and commit
+messages (the title and commit messages make up the squash commit); code and
+comments in the body are ignored, the title and commit messages are read as
+plain text. External contributors
+do not need to install internal agent tools or create duplicate work.
 
 ## Pull request and commit titles
 

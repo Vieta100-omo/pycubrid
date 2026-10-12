@@ -26,7 +26,7 @@ This guide covers how to install pycubrid, connect to a CUBRID database, and und
 
 | Requirement   | Version    |
 |---------------|------------|
-| Python        | 3.10+      |
+| Python        | 3.11+      |
 | CUBRID Server | 10.2–11.4  |
 
 No C compiler or native libraries required — pycubrid is pure Python.
@@ -49,7 +49,7 @@ pip install pycubrid
 ```bash
 git clone https://github.com/cubrid-lab/pycubrid.git
 cd pycubrid
-pip install -e ".[dev]"
+pip install -e . --group dev   # pip 25.1+; contributor tools are a dependency group
 ```
 
 ---
@@ -813,7 +813,9 @@ aconn = await pycubrid.aio.connect(database="kodb", charset="euckr")
 ```
 
 **Accepted values.** Any Python codec name, plus the CUBRID spellings `utf8`,
-`euckr` and `iso88591` (`ksc5601` works through Python's own EUC-KR alias), and
+`euckr` and `iso88591`, plus `ksc5601`, which pycubrid always maps to EUC-KR (Python
+3.15 maps its own `ksc5601` alias and the other KS C 5601 aliases, such as
+`ks_c_5601` and `korean`, to CP949, which is rejected below), and
 a CUBRID locale as given to `createdb`, such as `"ko_KR.euckr"`, whose part
 after the dot is used. `None` means the default `"utf-8"`. The name is
 normalized to the Python codec name (`"euckr"` becomes `"euc_kr"`). The option
